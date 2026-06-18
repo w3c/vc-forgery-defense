@@ -1,38 +1,965 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <title>Spec proposal</title>
-    <script src="https://www.w3.org/Tools/respec/respec-w3c" class="remove"></script>
-    <script class='remove'>
-      // See https://github.com/w3c/respec/wiki/ for how to configure ReSpec
-      var respecConfig = {
-        specStatus: "CG-DRAFT",
-        shortName: "vc-forgery-defense",
-        editors: [{
-          name: "Ivan Herman"
-        }]
-      };
-    </script>
-  </head>
-  <body>
-    <section id="abstract">
-      <p>
-        This specification does neat stuff.
-      </p>
-    </section>
-    <section id="sotd">
-      <p>
-        This is an unofficial proposal.
-      </p>
-    </section>
+<head>
+  <meta charset="utf-8"/>
+  <title>Verifiable Credential Forgery Defense</title>
+  <script src="https://www.w3.org/Tools/respec/respec-w3c" class="remove" defer></script>
+  <script class="remove"
+    src="https://cdn.jsdelivr.net/gh/w3c/respec-vc@3.4.3/dist/main.js"></script>
+  <script class="remove">
+    var respecConfig = {
+      group: "vc",
+      specStatus:   "ED",
+      shortName:    "vc-forgery-defense",
+      subtitle:     "An anti-forgery mechanism for Verifiable Credentials using indexed hash witnesses",
+      edDraftURI:   "https://w3id.org/vc-forgery-defense/",
+      editors: [
+        {
+          name:       "Wesley Smith",
+          url:        "",
+          company:    "Digital Bazaar",
+          companyURL: "",
+          w3cid: 152091
+        }
+      ],
+      authors: [
+        {
+          name:       "Wesley Smith",
+          url:        "",
+          company:    "Digital Bazaar",
+          companyURL: "",
+          w3cid: 152091
+        },
+        {
+          name:       "Dave Longley",
+          url:        "",
+          company:    "Digital Bazaar",
+          companyURL: "",
+          w3cid: 48025
+        },
+        {
+          name:       "Manu Sporny",
+          url:        "",
+          company:    "Digital Bazaar",
+          companyURL: "",
+          w3cid: 41758
+        }
 
-    <section id="introduction">
-      <h2>Introduction</h2>
+      ],
+      github: "w3c/vc-forgery-defense",
+      localBiblio: {
+        "VC-DATA-MODEL-2.0": {
+          title:    "Verifiable Credentials Data Model 2.0",
+          href:     "https://www.w3.org/TR/vc-data-model-2.0/",
+          authors:  ["Manu Sporny", "Ted Thibodeau Jr", "Ivan Herman", "Michael B. Jones", "Gabe Cohen"],
+          status:   "REC",
+          publisher: "W3C"
+        },
+        "VC-BITSTRING-STATUS-LIST": {
+          title:    "Verifiable Credential Bitstring Status List",
+          href:     "https://www.w3.org/TR/vc-bitstring-status-list/",
+          authors:  ["Manu Sporny", "Dave Longley", "Markus Sabadello"],
+          status:   "REC",
+          publisher: "W3C"
+        },
+        "VC-DI-QUANTUM-RESISTANT": {
+          title:    "Quantum-Resistant Cryptosuites 1.0",
+          href:     "https://www.w3.org/TR/vc-di-quantum-resistant-1.0/",
+          authors:  ["Manu Sporny", "Dave Longley", "Markus Sabadello"],
+          status:   "REC",
+          publisher: "W3C"
+        },
+        "MULTIBASE": {
+          title:   "The Multibase Encoding Scheme",
+          href:    "https://datatracker.ietf.org/doc/html/draft-multiformats-multibase",
+          authors: ["Juan Benet", "Manu Sporny"]
+        },
+        "FIPS-180-4": {
+          title:    "Secure Hash Standard (SHS)",
+          href:     "https://csrc.nist.gov/publications/detail/fips/180/4/final",
+          publisher: "NIST"
+        },
+        "RFC4122": {
+          title:    "A Universally Unique IDentifier (UUID) URN Namespace",
+          href:     "https://www.rfc-editor.org/rfc/rfc4122",
+          authors:  ["P. Leach", "M. Mealling", "R. Salz"],
+          publisher: "IETF"
+        }
+      },
+      xref: ["INFRA", "VC-DATA-MODEL-2.0", "VC-DATA-INTEGRITY", "VC-DI-QUANTUM-RESISTANT-1.0", "VC-BITSTRING-STATUS-LIST"],
+      maxTocLevel: 3,
+      postProcess: [window.respecVc.createVcExamples]
+    };
+  </script>
+  <style>
+    pre .comment { font-weight: bold; color: SteelBlue; }
+    code { color: rgb(199, 73, 0); font-weight: bold; }
+    .algorithm ol > li { margin-bottom: 0.5em; }
+  </style>
+</head>
+<body>
+
+<section id="sotd">
+</section>
+
+<section id="abstract">
+  <p>
+    This specification describes a mechanism for <a>issuers</a> of
+    <a data-cite="VC-DATA-MODEL-2.0#dfn-verifiable-credential">verifiable
+    credentials</a> to publish indexed lists of compact cryptographic
+    witnesses. Verifiers can use these lists to
+    confirm that a [=verifiable credential=] was genuinely issued by the claimed
+    issuer — as distinct from a credential forged by an attacker who has
+    compromised the issuer's signing key. Because the witness list is itself
+    a verifiable credential, it can be signed with a different algorithm from
+    the protected credentials, including post-quantum signature schemes. This
+    makes the mechanism particularly valuable in scenarios where a conventional
+    signing key has been compromised by a quantum-capable adversary.
+  </p>
+  <p>
+    This work is complementary to the [[[VC-DI-QUANTUM-RESISTANT]]] work
+    and is motivated by the same threat: compromise of a
+    conventional signing key by a cryptographically relevant quantum computer.
+    Those cryptosuites let issuers secure <em>new</em> proofs with post-quantum
+    signatures; this specification lets an issuer establish post-quantum-backed
+    authenticity for credentials that were, or will be, signed with conventional
+    quantum-vulnerable algorithms, by publishing a witness list that is itself
+    signed with a post-quantum scheme.
+  </p>
+  <p>
+    The specification defines a data model and algorithms for three usage
+    modes: an <a>implicit mode</a> that piggybacks on an existing
+    [[[VC-BITSTRING-STATUS-LIST]]] without
+    modifying the protected credential; an <a>explicit mode</a> that adds a
+    <code>credentialStatus</code> entry to the protected credential; and a
+    <a>standalone mode</a> for use cases that define their own index
+    allocation.
+  </p>
+</section>
+
+<!-- =====================================================================
+     INTRODUCTION
+     ===================================================================== -->
+<section id="introduction" class="informative">
+  <h2>Introduction</h2>
+  <p>
+     [=Verifiable Credentials=] are often secured with digital signatures over their
+    contents. If the issuer's private signing key is compromised — whether
+    through an infrastructure breach or through advances in cryptanalysis such
+    as the development of a cryptographically relevant quantum computer — an
+    attacker can forge credentials that are indistinguishable from those created
+    by the issuing party using standard signature verification alone.
+  </p>
+  <p>
+    This specification provides a mechanism similar to
+    [[[VC-BITSTRING-STATUS-LIST]]]
+    that allows an issuer to assert what subset of the credentials issued
+    with their private key material they actually issued. This takes the form
+    of a witness list that the issuer publishes alongside their
+    credentials. For each credential issued, the issuer computes a short
+    cryptographic witness derived from a random seed and the credential's
+    position in the list. A verifier who fetches the list can confirm that 
+    the witness of the credential they are verifying matches the witness
+    published by the issuer.
+  </p>
+  <p>
+    The witness list is itself a <a>verifiable credential</a> and may be
+    signed using a different digital signature algorithm than the credentials
+    on the list. Importantly, the witness list may be signed with a
+    quantum-resistant digital signature, such as those in the
+    [[[VC-DI-QUANTUM-RESISTANT]]] specification. In this way, an issuer can
+    establish quantum-resistant authenticity for credentials issued with
+    conventional and non-quantum-resistant digital signatures.
+  </p>
+  <p>
+    This specification is complementary to the
+    [[[VC-DI-QUANTUM-RESISTANT]]]. Both are responses to the same threat —
+    compromise of conventional signing keys, in particular by a cryptographically
+    relevant quantum computer. Quantum-resistant cryptosuites address the threat going
+    forward, producing proofs that remain unforgeable in a post-quantum
+    setting. A <a>witness list</a> addresses the installed base and the
+    transition period: it lets an issuer vouch, under a post-quantum signature,
+    for credentials that were already issued — or that must continue to be
+    issued — under conventional signatures, without re-issuing them. The two
+    mechanisms are intended to be used together.
+  </p>
+
+  <section id="design-goals" class="informative">
+    <h3>Design Goals</h3>
+    <ul>
+      <li><strong>Anti-forgery.</strong> Distinguish genuinely-issued credentials
+        from forged ones in the event of key compromise.</li>
+      <li><strong>Digital signature independence.</strong> Allow the witness list to be
+        signed with a digital signature scheme independent of that used on the credentials it
+        covers.</li>
+      <li><strong>Compactness.</strong> Each witness is a fixed number of bits
+        (default 128), making large lists practical to distribute.</li>
+      <li><strong>Flexibility.</strong> Three usage modes cover integration with
+        existing status list infrastructure, explicit per-credential references,
+        and standalone deployments.</li>
+      <li><strong>Privacy.</strong> The list reveals nothing about credential
+        contents; witnesses are pseudorandom values, and
+        witness lists are fixed-size and regularly re-randomized to
+        avoid leaking information about issuer processes.</li>
+    </ul>
+  </section>
+
+  <section id="usage-overview" class="informative">
+    <h3>Usage Overview</h3>
+    <p>
+      At [=verifiable credential=] issuance time, an <a>issuer</a> uses the credential data
+      to create a cryptographic witness. A set of these witnesses are combined with a random
+      seed, packed into an array, and published together as a <a>witness list credential</a>.
+      This credential is signed — optionally with a post-quantum algorithm — and
+      published for verifiers to access.
+    </p>
+    <p>
+      At verification time, a <a>verifier</a> obtains the
+      <a>witness list credential</a>, re-derives the witness for the
+      credential they are verifying using the published random
+      seed and the credential data, and compares it to the value stored at the
+      credential's witness index. A mismatch indicates that the credential was
+      not issued by the claimed party.
+    </p>
+  </section>
+</section>
+
+<section id="conformance">
+  <p>
+    A <dfn>conforming document</dfn> is any concrete expression of the data
+    model that complies with the normative requirements in Section
+    <a href="#data-model"></a>. A <dfn>conforming processor</dfn> is any
+    algorithm realized as software and/or hardware that generates or consumes
+    a conforming document according to the normative requirements in Sections
+    <a href="#data-model"></a> and <a href="#algorithms"></a>.
+  </p>
+  <p>Conforming processors MUST produce errors when non-conforming documents
+  are consumed.</p>
+</section>
+
+<section id="terminology">
+  <h2>Terminology</h2>
+  <p>
+    The following terms are used throughout this document. Terms defined in
+    [[VC-DATA-MODEL-2.0]] are used with the meanings defined there.
+  </p>
+  <dl class="termlist">
+    <dt><dfn class="export">witness</dfn></dt>
+    <dd>
+      A fixed-length sequence of pseudorandom bits derived from a
+      <a>witness seed</a> and a credential hash by computing
+      <code>SHA-256(seedBytes || credentialHash)</code> and taking the most
+      significant <a>witness length</a> bits of the output.
+    </dd>
+
+    <dt><dfn class="export">witness list</dfn></dt>
+    <dd>
+      An ordered sequence of <a>witnesses</a> 
+      packed into a contiguous bit array and encoded as a multibase string.
+    </dd>
+
+    <dt><dfn class="export">witness list credential</dfn></dt>
+    <dd>
+      A <a>verifiable credential</a> of type <code>WitnessListCredential</code>
+      whose <code>credentialSubject</code> is of type <code>WitnessList</code>
+      and contains the witness list properties.
+    </dd>
+
+    <dt><dfn class="export">witness list entry</dfn></dt>
+    <dd>
+      An object of type <code>WitnessListEntry</code> that MAY appear in the
+      <code>credentialStatus</code> of a protected <a>verifiable credential</a>
+      in <a>explicit mode</a>, linking the credential to its position in a
+      <a>witness list credential</a>, which it references through an explicit
+      <code>witnessListCredential</code> property.
+    </dd>
+
+    <dt><dfn class="export">witness seed</dfn></dt>
+    <dd>
+      A UUID v4 [[RFC4122]] value that serves as the secret salt for generating
+      all witnesses in a list. The seed MUST be generated using a
+      cryptographically secure random number generator.
+    </dd>
+
+    <dt><dfn class="export">witness index</dfn></dt>
+    <dd>
+      A positive integer (1-based) identifying a credential's position in the
+      <a>witness list</a>.
+    </dd>
+
+    <dt><dfn class="export">witness length</dfn></dt>
+    <dd>
+      The number of bits in each <a>witness</a>. The default value is 128.
+      Larger values decrease the probability of a false positive match; see
+      <a href="#false-positive-rate"></a>.
+    </dd>
+
+    <dt><dfn class="export">witness count</dfn></dt>
+    <dd>
+      The total number of <a>witnesses</a> in a <a>witness list</a>.
+    </dd>
+
+    <dt><dfn class="export">encoded witnesses</dfn></dt>
+    <dd>
+      The [[[MULTIBASE]]]-encoded (base64url, prefix
+      <code>u</code>) packed bit array of all <a>witnesses</a> in a
+      <a>witness list</a>, typed as
+      <code>https://w3id.org/security#multibase</code> in the JSON-LD context.
+    </dd>
+
+    <dt><dfn class="export">implicit mode</dfn></dt>
+    <dd>
+      A usage mode in which the protected credential contains no reference to
+      the witness list; the list location and <a>witness index</a> are
+      inferred from the credential's existing <code>credentialStatus</code> entry,
+      and the status list index is reused as the <a>witness index</a>.
+    </dd>
+
+    <dt><dfn class="export">explicit mode</dfn></dt>
+    <dd>
+      A usage mode in which the protected credential contains a
+      <a>witness list entry</a> in its <code>credentialStatus</code> that
+      directly references the <a>witness list credential</a> and
+      <a>witness index</a>.
+    </dd>
+
+    <dt><dfn class="export">standalone mode</dfn></dt>
+    <dd>
+      A usage mode in which the <a>witness index</a> allocation is defined
+      by the application or use case, independent of any status list
+      infrastructure.
+    </dd>
+  </dl>
+</section>
+
+<section id="data-model">
+  <h2>Data Model</h2>
+
+  <section id="witness-list-credential">
+    <h3>Witness List Credential</h3>
+    <p>
+      A <a>witness list credential</a> is a
+      <a data-cite="VC-DATA-MODEL-2.0#dfn-verifiable-credential">verifiable
+      credential</a> whose <code>credentialSubject</code> is of type
+      <code>WitnessList</code> and carries the <a>witness list</a> properties
+      (<code>witnessSeed</code>, <code>witnessLength</code>,
+      <code>witnessCount</code>, and <code>encodedWitnesses</code>) directly. Issuers SHOULD use a
+      separate key pair — and MAY use a post-quantum signature scheme — to
+      sign the witness list credential, since the protection it provides
+      is only meaningful if it can be verified after the ordinary signing key
+      has been compromised.
+    </p>
+    <p>
+      The <code>type</code> array of the credential MUST include
+      <code>WitnessListCredential</code>.
+    </p>
+
+    <pre class="example" title="Witness List Credential">
+{
+  "@context": [
+    "https://www.w3.org/ns/credentials/v2",
+    "https://w3id.org/vc-forgery-defense/v1rc1"
+  ],
+  "id": "https://issuer.example/witnesses/1",
+  "type": ["VerifiableCredential", "WitnessListCredential"],
+  "issuer": "did:example:issuer",
+  "validFrom": "2024-01-15T00:00:00Z",
+  "credentialSubject": {
+    "type": "WitnessList",
+    "witnessSeed": "26ea4078-968d-4d98-aba7-695610c0dfb6",
+    "witnessLength": 128,
+    "witnessCount": 131072,
+    "encodedWitnesses": "uQYF16SSSbR_LrMZFbFvbGkn8B7ggEZtov3KVL..."
+  },
+  "proof": {
+    "type": "DataIntegrityProof",
+    "cryptosuite": "eddsa-rdfc-2022",
+    "comment": "MAY use a post-quantum cryptosuite here",
+    "verificationMethod": "did:example:issuer#pq-key-1",
+    "proofPurpose": "assertionMethod",
+    "proofValue": "z..."
+  }
+}
+    </pre>
+    <p>
+When <code>WitnessListCredentials</code> are distributed by an issuer
+via a space-constrained medium (such as over the web for large credentials),
+it is RECOMMENDED that they are <a href="https://www.w3.org/TR/cbor-ld-10/">CBOR-LD</a>
+encoded and transmitted as bytes.
+    </p>
+
+    <section id="witness-list-properties">
+      <h4>Witness List Properties</h4>
       <p>
-        See <a href="https://github.com/w3c/respec/wiki/User's-Guide">ReSpec's user guide</a>
-        for how toget started!
+        The <code>credentialSubject</code> of a <code>WitnessList</code>
+        MUST contain the following properties directly.
       </p>
+      <dl>
+        <dt><dfn>witnessSeed</dfn></dt>
+        <dd>
+          REQUIRED. A UUID v4 string [[RFC4122]] used as the
+          <a>witness seed</a>. Implementations MUST
+          generate a new <a>witnessSeed</a> value each
+          time they issue a <a>WitnessListCredential</a>.
+        </dd>
+
+        <dt><dfn>witnessLength</dfn></dt>
+        <dd>
+          REQUIRED. A positive integer specifying the number of bits per
+          <a>witness</a>. MUST be at least 32. SHOULD be at least 128.
+          Default is 128.
+        </dd>
+
+        <dt><dfn>witnessCount</dfn></dt>
+        <dd>
+          REQUIRED. A positive integer specifying the total number of
+          witnesses in the list, determining the expected length of the
+          <a>encoded witnesses</a> value.
+          Noting that group privacy depends on sufficiently large
+          <a>witnessCount</a>, implementations MUST choose a value
+          greater than or equal to 131072. 
+        </dd>
+
+        <dt><dfn>encodedWitnesses</dfn></dt>
+        <dd>
+          REQUIRED. A [[[MULTIBASE]]]-encoded string
+          (base64url, prefix <code>u</code>), typed as
+          <code>https://w3id.org/security#multibase</code>, representing the
+          packed bit array of all <a>witnesses</a>. The witness for
+          <a>witness index</a> <em>i</em> occupies bits
+          <code>(i − 1) × witnessLength</code> through
+          <code>i × witnessLength − 1</code> (inclusive) in
+          most-significant-bit-first order.
+        </dd>
+      </dl>
     </section>
-  </body>
+  </section>
+
+  <section id="witness-list-entry">
+    <h3>Witness List Entry</h3>
+    <p>
+      When used in <a>explicit mode</a>, a protected <a>verifiable
+      credential</a> MAY include a <a>witness list entry</a> in its
+      <code>credentialStatus</code> array (or as its sole
+      <code>credentialStatus</code> value).
+    </p>
+    <p>
+      The <code>type</code> of the entry MUST be <code>WitnessListEntry</code>.
+      Following the pattern of [[[VC-BITSTRING-STATUS-LIST]]]'s
+      <code>statusListCredential</code> property, the entry references its
+      <a>witness list credential</a> through an explicit
+      <code>witnessListCredential</code> property whose value is the URL of
+      that credential. The entry's <code>id</code>, if present, is an OPTIONAL
+      unique identifier for the entry and is not used to locate the list.
+    </p>
+
+    <dl>
+      <dt><dfn>witnessListCredential</dfn></dt>
+      <dd>
+        REQUIRED. A URL that dereferences to the <a>witness list
+        credential</a> for this credential. This property is the analogue of
+        <code>statusListCredential</code> in [[[VC-BITSTRING-STATUS-LIST]]].
+      </dd>
+      <dt><dfn>witnessIndex</dfn></dt>
+      <dd>
+        REQUIRED. A positive integer (1-based) specifying the position of this
+        credential's <a>witness</a> in the referenced list. MUST be greater
+        than 0 and MUST NOT exceed <code>witnessCount</code>.
+      </dd>
+    </dl>
+
+    <pre class="example" title="Credential with explicit Witness List Entry alongside Bitstring Status">
+{
+  "@context": [
+    "https://www.w3.org/ns/credentials/v2",
+    "https://w3id.org/vc-forgery-defense/v1rc1"
+  ],
+  "id": "https://issuer.example/credentials/1234",
+  "type": ["VerifiableCredential", "ExampleDegreeCredential"],
+  "issuer": "did:example:issuer",
+  "validFrom": "2024-01-15T00:00:00Z",
+  "credentialStatus": [
+    {
+      "id": "https://issuer.example/status/1#94567",
+      "type": "BitstringStatusListEntry",
+      "statusPurpose": "revocation",
+      "statusListIndex": "94567",
+      "statusListCredential": "https://issuer.example/status/1"
+    },
+    {
+      "type": "WitnessListEntry",
+      "witnessListCredential": "https://issuer.example/witnesses/1",
+      "witnessIndex": 94567
+    }
+  ],
+  "credentialSubject": {
+    "id": "did:example:holder",
+    "degree": {"type": "BachelorDegree", "name": "Computer Science"}
+  },
+  "proof": { ... }
+}
+    </pre>
+  </section>
+</section>
+
+<section id="algorithms">
+  <h2>Algorithms</h2>
+
+  <section id="generate-witness-list">
+    <h3>Generate Witness List</h3>
+    <p>
+      The following algorithm generates a <a>witness list</a> for a set
+      of <em>N</em> credential hashes. Inputs: an array of <em>N</em> hashes,
+      in order of their desired <a>witnessIndex</a> values,
+      and the <a>witness length</a> <em>b</em> (default 128). Outputs: a
+      <a>witness seed</a> and <a>encoded witnesses</a>.
+    </p>
+    <ol class="algorithm">
+      <li>
+        Generate a UUID v4 value <em>seed</em> using a cryptographically
+        secure random number generator [[RFC4122]].
+      </li>
+      <li>
+        Let <em>seedBytes</em> be the 16-byte representation of <em>seed</em>
+        obtained by decoding its hex digits (stripping hyphens) as a big-endian
+        byte sequence.
+      </li>
+      <li>Let <em>data</em> be a zeroed bit array of <em>N × b</em> bits.</li>
+      <li>
+        For each integer <em>i</em> from 0 to <em>N-1</em>, inclusive:
+        <ol>
+          <li>
+            Let <em>msg</em> be the <em>ith</em> credential hash from the input
+            array.
+          </li>
+          <li>
+            Let <em>hash</em> be the output of SHA-256 [[FIPS-180-4]] applied
+            to the concatenation <em>seedBytes || msg</em>.
+          </li>
+          <li>Let <em>w</em> be the most significant <em>b</em> bits of
+            <em>hash</em>.</li>
+          <li>
+            Write <em>w</em> into <em>data</em> at bit offset
+            <code>(i − 1) × b</code>, most-significant-bit first.
+          </li>
+        </ol>
+      </li>
+      <li>
+        Let <em>encodedWitnesses</em> be the multibase-base64url encoding
+        of <em>data</em>, prepended with the prefix character <code>u</code>
+        [[MULTIBASE]].
+      </li>
+      <li>Return <em>seed</em> and <em>encodedWitnesses</em>.</li>
+    </ol>
+  </section>
+
+  <section id="generate-witness-list-credential">
+    <h3>Generate Witness List Credential</h3>
+    <p>
+      The following algorithm wraps the output of
+      <a href="#generate-witness-list">Generate Witness List</a> into
+      a signed verifiable credential.
+    </p>
+    <ol class="algorithm">
+      <li>
+        Run <a href="#generate-witness-list">Generate Witness List</a>
+        with inputs <em>N</em> and <em>b</em>, producing <em>seed</em> and
+        <em>encodedWitnesses</em>.
+      </li>
+      <li>
+        Construct an unsigned credential with:
+        <ul>
+          <li><code>type</code> including <code>WitnessListCredential</code></li>
+          <li><code>credentialSubject.type</code> set to <code>WitnessList</code></li>
+          <li><code>credentialSubject.witnessSeed</code>
+            set to <em>seed</em></li>
+          <li><code>credentialSubject.witnessLength</code>
+            set to <em>b</em></li>
+          <li><code>credentialSubject.witnessCount</code>
+            set to <em>N</em></li>
+          <li><code>credentialSubject.encodedWitnesses</code>
+            set to <em>encodedWitnesses</em></li>
+        </ul>
+      </li>
+      <li>
+        Sign the credential. If protection against key compromise — including
+        quantum key compromise — is required, the issuer SHOULD use a
+        post-quantum signature scheme and a key pair distinct from those used
+        to sign the protected credentials.
+      </li>
+      <li>Return the signed credential.</li>
+    </ol>
+  </section>
+
+  <section id="verify-witness">
+    <h3>Verify a Credential Witness</h3>
+    <p>
+      The following algorithm verifies that a given credential's witness
+      is valid. Inputs: the resolved <a>witness list credential</a>, a credential
+      hash, and the <a>witness index</a> <em>i</em>.
+    </p>
+    <ol class="algorithm">
+      <li>
+        Verify all proofs on the <a>witness list credential</a>. If any
+        proof fails, return an error.
+      </li>
+      <li>
+        Let <em>subject</em> be the witness list credential's
+        <code>credentialSubject</code>.
+      </li>
+      <li>Let <em>seed</em> be <em>subject</em><code>.witnessSeed</code>.</li>
+      <li>Let <em>b</em> be <em>subject</em><code>.witnessLength</code>.</li>
+      <li>Let <em>N</em> be <em>subject</em><code>.witnessCount</code>.</li>
+      <li>
+        If <em>i</em> &lt; 1 or <em>i</em> &gt; <em>N</em>, return an error
+        indicating the index is out of range.
+      </li>
+      <li>
+        Let <em>encodedWitnesses</em> be
+        <em>subject</em><code>.encodedWitnesses</code>.
+      </li>
+      <li>
+        Verify that <em>encodedWitnesses</em> begins with the character
+        <code>u</code>. If not, return an error.
+      </li>
+      <li>
+        Let <em>data</em> be the result of base64url-decoding the substring of
+        <em>encodedWitnesses</em> after the first character.
+      </li>
+      <li>
+        Extract bits at offset <code>(i − 1) × b</code> through
+        <code>i × b − 1</code> from <em>data</em>, most-significant-bit first.
+        Let this be <em>storedW</em>.
+      </li>
+      <li>
+        Let <em>seedBytes</em> be the 16-byte representation of <em>seed</em>
+        obtained by decoding its hex digits (stripping hyphens) as a big-endian
+        byte sequence.
+      </li>
+      <li>
+        Let <em>msg</em> be the input credential hash.
+      </li>
+      <li>
+        Let <em>hash</em> be SHA-256 [[FIPS-180-4]] of
+        <em>seedBytes || msg</em>.
+      </li>
+      <li>
+        Let <em>computedW</em> be the most significant <em>b</em> bits of
+        <em>hash</em>.
+      </li>
+      <li>
+        If <em>storedW</em> equals <em>computedW</em>, return
+        <code>valid</code>. Otherwise return <code>invalid</code>.
+      </li>
+    </ol>
+  </section>
+</section>
+
+<section id="usage-modes">
+  <h2>Usage Modes</h2>
+
+  <section id="implicit-mode">
+    <h3>Implicit Mode</h3>
+    <p>
+      In <a>implicit mode</a>, the protected credential is unmodified. No
+      reference to the witness list appears in the credential itself. The
+      verifier locates the witness list using out-of-band information —
+      typically derived from the credential's existing
+      <code>credentialStatus</code> entry — and reuses the status list index
+      as the <a>witness index</a>.
+    </p>
+    <p>This mode REQUIRES that:</p>
+    <ul>
+      <li>
+        The protected credential has a <code>BitstringStatusListEntry</code>
+        (or equivalent) whose index corresponds 1:1 to a position in the
+        witness list.
+      </li>
+      <li>
+        The issuer publishes a discovery mechanism — for example, a well-known
+        endpoint or an entry in their DID document — that maps a given status
+        list URL to the corresponding <a>witness list credential</a> URL.
+      </li>
+    </ul>
+
+    <pre class="example" title="Resolving witness list in implicit mode">
+// Protected credential has:
+//   credentialStatus.statusListCredential = "https://issuer.example/status/1"
+//   credentialStatus.statusListIndex      = "94567"
+
+// Verifier discovers witness list URL from issuer metadata:
+// GET https://issuer.example/.well-known/witness-lists
+// -> { "https://issuer.example/status/1":
+//      "https://issuer.example/witnesses/1" }
+
+// Witness index = 94567 (same as status list index)
+// Run: Verify a Credential Witness with i = 94567
+    </pre>
+  </section>
+
+  <section id="explicit-mode">
+    <h3>Explicit Mode</h3>
+    <p>
+      In <a>explicit mode</a>, the protected credential contains a
+      <a>witness list entry</a> in its <code>credentialStatus</code>. The
+      entry's <code>witnessListCredential</code> property gives the
+      <a>witness list credential</a> URL, and <code>witnessIndex</code>
+      specifies the 1-based position in the list. No discovery mechanism is
+      required.
+    </p>
+    <p>
+      Explicit mode MAY coexist with other <code>credentialStatus</code>
+      entries (such as a <code>BitstringStatusListEntry</code> for revocation).
+      If both are present, <code>witnessIndex</code> need not equal the
+      status list index.
+    </p>
+
+    <section id="explicit-mode-verification">
+      <h4>Verification in Explicit Mode</h4>
+      <ol class="algorithm">
+        <li>
+          Locate a <code>credentialStatus</code> entry of type
+          <code>WitnessListEntry</code>.
+        </li>
+        <li>
+          Let the <a>witness list credential</a> URL be the value of the
+          entry's <code>witnessListCredential</code> property.
+        </li>
+        <li>Dereference that URL to obtain the witness list credential.</li>
+        <li>
+          Run <a href="#verify-witness">Verify a Credential Witness</a>
+          using the value of <code>witnessIndex</code> as <em>i</em>.
+        </li>
+      </ol>
+    </section>
+  </section>
+
+  <section id="standalone-mode">
+    <h3>Standalone Mode</h3>
+    <p>
+      In <a>standalone mode</a>, the <a>witness list</a> is used
+      independently of any status list infrastructure. The allocation of
+      <a>witness indices</a> to credentials is defined by the specific
+      application or use case. The witness list credential MAY be
+      referenced from credentials, application-layer records, or external
+      registries — the reference mechanism is out of scope for this
+      specification.
+    </p>
+
+  </section>
+</section>
+
+<section id="security-considerations">
+  <h2>Security Considerations</h2>
+
+  <section id="quantum-key-compromise">
+    <h3>Quantum Key Compromise</h3>
+    <p>
+      A quantum-capable adversary can recover the private key corresponding to
+      a conventional (e.g., ECDSA) public key. If the issuer has
+      signed the <a>witness list credential</a> with a post-quantum
+      signature scheme, a verifier can still trust the witness list even
+      after the signing key for the credentials on it has been broken, provided the
+      post-quantum key remains secure.
+    </p>
+    <p>
+      Issuers SHOULD sign the witness list credential with a post-quantum
+      signature scheme whenever the credentials it covers are of significant
+      value or long validity.
+    </p>
+  </section>
+
+  <section id="seed-confidentiality">
+    <h3>Seed Confidentiality</h3>
+    <p>
+      The <a>witness seed</a> appears in the witness list credential's
+      <code>credentialSubject</code> and
+      is visible to any party who obtains the witness list credential.
+      This is by design — verifiers need the seed to recompute witnesses.
+      Issuers who wish to restrict verification to a specific set of verifiers
+      SHOULD limit distribution of the witness list credential accordingly.
+    </p>
+  </section>
+
+  <section id="false-positive-rate">
+    <h3>False Positive Rate</h3>
+    <p>
+A forged credential at index <em>i</em> passes witness verification
+with probability 2<sup>−<em>b</em></sup>, where <em>b</em> is the
+<a>witness length</a>. At the default of <em>b</em> = 128, this
+probability is approximately 2.9 × 10<sup>−39</sup>.
+    </p>
+    <p>
+      Implementations MUST NOT accept values of <em>b</em> less than 32. A
+      minimum of 64 is RECOMMENDED for credentials of significant value.
+    </p>
+    <p>
+Witnesses SHOULD be computed in a way that is generally collision resistant,
+but they MUST be computed in a way that is second-preimage resistant.
+
+    </p>
+  </section>
+
+  <section id="list-integrity">
+    <h3>Witness List Integrity</h3>
+    <p>
+      Verifiers MUST verify the proof on the <a>witness list credential</a>
+      before trusting its contents. Verifiers SHOULD cache resolved witness
+      list credentials for their validity period to reduce network exposure and
+      denial-of-service risk.
+    </p>
+  </section>
+
+  <section id="issuer-information-leaks">
+    <h3>Issuer Information Leaks</h3>
+    <p>
+Using <a>witnessCount</a> exactly sized to how many issued
+[=verifiable credentials=] the list covers leaks information about issuer
+processes in two ways:
+      <ul>
+        <li>
+The total number of witnesses at a moment in time tells an attacker
+how many issued VCs exist at that moment in time.
+        </li>
+        <li>
+Tracking total witnesses over time tells an attacker how
+many VCs are being issued per unit time.
+        </li>
+      </ul>
+    </p>
+    <p>
+To mitigate the first leak, issuers SHOULD use fixed <a>witnessCount</a>
+values, such that across all witness lists the total number of witnesses
+does not change, with arbitrary data witness placeholders being replaced
+by witnesses that correspond to VCs over time.
+    </p>
+    <p>
+This is sufficient to mitigate the first leak - however, an attacker still could
+track how many witnesses are "real" and how many VCs are being issued by tracking
+what witness values change over time. To address this, issuers MUST regenerate
+the random witness seed each time they update a <a>WitnessListCredential</a>.
+    </p>
+ 
+  </section>
+
+  <section id="rollback">
+    <h3>List Replacement and Rollback</h3>
+    <p>
+      An attacker who can replace the published witness list credential
+      with a modified version can bypass the anti-forgery mechanism. Issuers
+      MUST publish witness list credentials over integrity-protected
+      channels and SHOULD use short validity periods combined with frequent
+      re-issuance.
+    </p>
+  </section>
+
+  <section id="issuer-repudiation">
+    <h3>Issuer Repudiation via Witness Replacement</h3>
+    <p>
+      The issuer is the sole author of the <a>witness list credential</a>,
+      and is REQUIRED to regenerate the <a>witness seed</a> each time the
+      list is updated (see <a href="#issuer-information-leaks"></a>). An issuer
+      can therefore <em>repudiate</em> a credential it previously issued by
+      publishing a new <a>witness list credential</a> in which that
+      credential's <a>witness</a> is absent or altered: a verifier who
+      recomputes the <a>witness</a> against the latest list obtains a
+      mismatch and rejects an otherwise genuine credential. Unlike forgery,
+      this behavior is available to the legitimate issuer and cannot be
+      prevented by the mechanism alone, because every published list is a
+      validly signed credential.
+    </p>
+    <p>
+      Relying parties that require evidence of issuance to survive later
+      repudiation SHOULD retain (cache or archive) the
+      <a>witness list credentials</a> they relied upon, together with their
+      proofs and validity periods. Because each
+      <a>witness list credential</a> is itself a signed
+      <a>verifiable credential</a> with a <code>validFrom</code> value, a
+      credential that verified against a list published <em>before</em> the
+      repudiation can still be shown to have been genuine as of that earlier
+      list — the cached, signed list is durable evidence that the issuer
+      attested to the credential at that time. Independent archival,
+      notarization, or transparency-log witnessing of published lists
+      strengthens this guarantee by making the issuer's published history
+      non-repudiable.
+    </p>
+  </section>
+</section>
+
+<section id="privacy-considerations">
+  <h2>Privacy Considerations</h2>
+
+  <section id="group-privacy">
+    <h3>Group Privacy and List Size</h3>
+    <p>
+      The <code>witnessCount</code> value reveals the maximum number of
+      credentials in a batch. Issuers MUST use large set sizes (at least
+      131072 entries) so that individual holders cannot be identified by their
+      position in the list. All slots in such a set must be filled, whether or
+      not the hash used to create the witness corresponds to a
+      verifiable credential.
+    </p>
+  </section>
+
+  <section id="correlation">
+    <h3>Correlation Risk</h3>
+    <p>
+      Fetching the <a>witness list credential</a> creates a network request
+      that may reveal to the host that verification is occurring. Verifiers
+      SHOULD cache witness list credentials and MAY use privacy-preserving
+      network transports when fetching lists. Issuers SHOULD serve witness
+      lists through CDNs or content-addressed systems to reduce correlation
+      capability.
+    </p>
+  </section>
+</section>
+
+<section id="context">
+  <h2>JSON-LD Context</h2>
+  <p>
+    This specification defines a JSON-LD context at
+    <a href="https://w3id.org/vc-forgery-defense/v1rc1">
+      https://w3id.org/vc-forgery-defense/v1rc1
+    </a>. The context is reproduced below for reference.
+  </p>
+  <pre class="example nohighlight" title="Forgery Defense JSON-LD Context (v1rc1)">
+{
+  "@context": {
+    "@protected": true,
+    "id":   "@id",
+    "type": "@type",
+
+    "WitnessListCredential": "https://w3id.org/vc-forgery-defense#WitnessListCredential",
+    "WitnessList":           "https://w3id.org/vc-forgery-defense#WitnessList",
+    "WitnessListEntry":      "https://w3id.org/vc-forgery-defense#WitnessListEntry",
+
+    "witnessSeed": {
+      "@id": "https://w3id.org/vc-forgery-defense#witnessSeed"
+    },
+    "encodedWitnesses": {
+      "@id":   "https://w3id.org/vc-forgery-defense#encodedWitnesses",
+      "@type": "https://w3id.org/security#multibase"
+    },
+    "witnessLength": {
+      "@id":   "https://w3id.org/vc-forgery-defense#witnessLength",
+      "@type": "http://www.w3.org/2001/XMLSchema#integer"
+    },
+    "witnessCount": {
+      "@id":   "https://w3id.org/vc-forgery-defense#witnessCount",
+      "@type": "http://www.w3.org/2001/XMLSchema#integer"
+    },
+    "witnessIndex": {
+      "@id":   "https://w3id.org/vc-forgery-defense#witnessIndex",
+      "@type": "http://www.w3.org/2001/XMLSchema#integer"
+    },
+    "witnessListCredential": {
+      "@id":   "https://w3id.org/vc-forgery-defense#witnessListCredential",
+      "@type": "@id"
+    }
+  }
+}
+  </pre>
+</section>
+
+</body>
 </html>

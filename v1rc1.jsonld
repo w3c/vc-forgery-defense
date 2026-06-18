@@ -1,0 +1,35 @@
+{
+  "@context": {
+    "@protected": true,
+    "id":   "@id",
+    "type": "@type",
+
+    "WitnessListCredential": "https://w3id.org/vc-forgery-defense#WitnessListCredential",
+    "WitnessList":           "https://w3id.org/vc-forgery-defense#WitnessList",
+    "WitnessListEntry":      "https://w3id.org/vc-forgery-defense#WitnessListEntry",
+
+    "witnessSeed": {
+      "@id": "https://w3id.org/vc-forgery-defense#witnessSeed"
+    },
+    "encodedWitnesses": {
+      "@id":   "https://w3id.org/vc-forgery-defense#encodedWitnesses",
+      "@type": "https://w3id.org/security#multibase"
+    },
+    "witnessLength": {
+      "@id":   "https://w3id.org/vc-forgery-defense#witnessLength",
+      "@type": "http://www.w3.org/2001/XMLSchema#integer"
+    },
+    "witnessCount": {
+      "@id":   "https://w3id.org/vc-forgery-defense#witnessCount",
+      "@type": "http://www.w3.org/2001/XMLSchema#integer"
+    },
+    "witnessIndex": {
+      "@id":   "https://w3id.org/vc-forgery-defense#witnessIndex",
+      "@type": "http://www.w3.org/2001/XMLSchema#integer"
+    },
+    "witnessListCredential": {
+      "@id":   "https://w3id.org/vc-forgery-defense#witnessListCredential",
+      "@type": "@id"
+    }
+  }
+}
