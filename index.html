@@ -226,9 +226,9 @@
 
 <section id="conformance">
   <p>
-    A <dfn>conforming document</dfn> is any concrete expression of the data
+    A <dfn class="lint-ignore">conforming document</dfn> is any concrete expression of the data
     model that complies with the normative requirements in Section
-    <a href="#data-model"></a>. A <dfn>conforming processor</dfn> is any
+    <a href="#data-model"></a>. A <dfn class="lint-ignore">conforming processor</dfn> is any
     algorithm realized as software and/or hardware that generates or consumes
     a conforming document according to the normative requirements in Sections
     <a href="#data-model"></a> and <a href="#algorithms"></a>.
@@ -395,7 +395,7 @@ encoded and transmitted as bytes.
         MUST contain the following properties directly.
       </p>
       <dl>
-        <dt><dfn>witnessSeed</dfn></dt>
+        <dt><dfn class="export">witnessSeed</dfn></dt>
         <dd>
           REQUIRED. A UUID v4 string [[RFC4122]] used as the
           <a>witness seed</a>. Implementations MUST
@@ -403,14 +403,14 @@ encoded and transmitted as bytes.
           time they issue a <a>WitnessListCredential</a>.
         </dd>
 
-        <dt><dfn>witnessLength</dfn></dt>
+        <dt><dfn class="export">witnessLength</dfn></dt>
         <dd>
           REQUIRED. A positive integer specifying the number of bits per
           <a>witness</a>. MUST be at least 32. SHOULD be at least 128.
           Default is 128.
         </dd>
 
-        <dt><dfn>witnessCount</dfn></dt>
+        <dt><dfn class="export">witnessCount</dfn></dt>
         <dd>
           REQUIRED. A positive integer specifying the total number of
           witnesses in the list, determining the expected length of the
@@ -420,7 +420,7 @@ encoded and transmitted as bytes.
           greater than or equal to 131072. 
         </dd>
 
-        <dt><dfn>encodedWitnesses</dfn></dt>
+        <dt><dfn class="export">encodedWitnesses</dfn></dt>
         <dd>
           REQUIRED. A [[[MULTIBASE]]]-encoded string
           (base64url, prefix <code>u</code>), typed as
