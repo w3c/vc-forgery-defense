@@ -252,8 +252,9 @@
     <dd>
       A fixed-length sequence of pseudorandom bits derived from a
       <a>witness seed</a> and a credential hash by computing
-      <code>SHA-256(seedBytes || credentialHash)</code> and taking the most
-      significant <a>witness length</a> bits of the output.
+      <code>SHA-256(seedBytes || credentialHash)</code>, where
+      <em>seedBytes</em> is the UTF-8 encoding of the <a>witness seed</a>, and
+      taking the most significant <a>witness length</a> bits of the output.
     </dd>
 
     <dt><dfn class="export">witness list</dfn></dt>
@@ -280,9 +281,11 @@
 
     <dt><dfn class="export">witness seed</dfn></dt>
     <dd>
-      A UUID v4 [[RFC4122]] value that serves as the secret salt for generating
-      all witnesses in a list. The seed MUST be generated using a
-      cryptographically secure random number generator.
+      A string that serves as the salt for generating all
+      <a>witnesses</a> in a <a>witness list</a>. The seed is published in the
+      <a>witness list credential</a> and must be unpredictable before publication.
+      The seed MUST be drawn from a distribution having at least 122
+      bits of min-entropy: see <a href="#seed-unpredictability"></a>.
     </dd>
 
     <dt><dfn class="export">witness index</dfn></dt>
@@ -401,10 +404,12 @@ encoded and transmitted as bytes.
       <dl>
         <dt><dfn class="export">witnessSeed</dfn></dt>
         <dd>
-          REQUIRED. A UUID v4 string [[RFC4122]] used as the
-          <a>witness seed</a>. Implementations MUST
-          generate a new <a>witnessSeed</a> value each
-          time they issue a <a>WitnessListCredential</a>.
+          REQUIRED. A string used as the <a>witness seed</a>.
+          The seed MUST be generated as described in
+          <a href="#generate-witness-list"></a>, so that the value carries at
+          least 122 bits of min-entropy. Implementations
+          MAY use UUID v4 values. Implementations MUST generate a new
+          <a>witnessSeed</a> value each time they issue a <a>WitnessListCredential</a>.
         </dd>
 
         <dt><dfn class="export">witnessLength</dfn></dt>
@@ -520,13 +525,15 @@ encoded and transmitted as bytes.
     </p>
     <ol class="algorithm">
       <li>
-        Generate a UUID v4 value <em>seed</em> using a cryptographically
-        secure random number generator [[RFC4122]].
+        Let <em>seed</em> be a string carrying at least 122 bits of min-entropy,
+        generated using a cryptographically secure random number generator; for
+        example, 16 random bytes encoded as multibase-base64url [[MULTIBASE]],
+        or a UUID v4 value [[RFC4122]]. See
+        <a href="#seed-unpredictability"></a>.
       </li>
       <li>
-        Let <em>seedBytes</em> be the 16-byte representation of <em>seed</em>
-        obtained by decoding its hex digits (stripping hyphens) as a big-endian
-        byte sequence.
+        Let <em>seedBytes</em> be the result of UTF-8 encoding [[INFRA]]
+        <em>seed</em>.
       </li>
       <li>Let <em>data</em> be a zeroed bit array of <em>N × b</em> bits.</li>
       <li>
@@ -636,9 +643,8 @@ encoded and transmitted as bytes.
         Let this be <em>storedW</em>.
       </li>
       <li>
-        Let <em>seedBytes</em> be the 16-byte representation of <em>seed</em>
-        obtained by decoding its hex digits (stripping hyphens) as a big-endian
-        byte sequence.
+        Let <em>seedBytes</em> be the UTF-8 encoding [[INFRA]] of <em>seed</em>,
+        exactly as it appears in the credential.
       </li>
       <li>
         Let <em>msg</em> be the input credential hash.
@@ -782,6 +788,25 @@ encoded and transmitted as bytes.
       This is by design — verifiers need the seed to recompute witnesses.
       Issuers who wish to restrict verification to a specific set of verifiers
       SHOULD limit distribution of the witness list credential accordingly.
+    </p>
+  </section>
+
+  <section id="seed-unpredictability">
+    <h3>Seed Unpredictability</h3>
+    <p>
+      The <a>witness seed</a> is published in the <a>witness list credential</a>
+      and is not a secret; its value comes from having been
+      unpredictable before publication and in causing witness values to change
+      on every list iteration, regardless of whether or not the non-seed value changed.
+    </p>
+    <p>
+      Seeds MUST therefore carry at least 122 bits of min-entropy (the amount
+      present in a UUID v4 generation process), and MUST be
+      generated independently for each list and each revision of a list.
+      The requirement is min-entropy rather
+      than Shannon entropy because an attacker guesses the most likely candidate
+      first; the two coincide for uniform generator output and diverge for skewed
+      sources such as timestamps.
     </p>
   </section>
 
