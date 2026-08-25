@@ -808,7 +808,7 @@ encoded and transmitted as bytes.
       first; the two coincide for uniform generator output and diverge for skewed
       sources such as timestamps. As an example, consider a number generator
       that outputs the value `0` one time out of a million but a properly random
-      128 bit value the rest of the time. This generator should not be used at scale,
+      128 bit value the rest of the time. This generator ought not be used at scale,
       as one time out of a million a constant time attack will allow an attacker to predict
       a value that is supposed to be random. However, the Shannon entropy of this process
       is around 128 bits, which is above the threshold. The min-entropy is around 20 bits.
