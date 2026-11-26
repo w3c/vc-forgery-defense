@@ -1,0 +1,99 @@
+mermaid:
+  accDescr: |
+    Mermaid representation of the vocabulary, see the non-visual structure of the diagram
+    on ./vocabulary.mmd. Classes on the diagram correspond to the RDFS classes; connecting
+    lines with labels represent properties with ranges and domains defined in this vocabulary,
+    and entries in the class boxes correspond to properties on a class that have external
+    resources or datatypes as values.
+  extras:
+    - "WitnessListCredential --> WitnessList : credentialSubject"
+
+vocab:
+  - id: fd
+    value: https://www.w3.org/ns/credentials/forgeryDefense#
+    context: https://www.w3.org/ns/credentials/forgeryDefense/v1.0rc1
+
+prefix:
+  - id: cred
+    value: https://w3.org/2018/credentials#
+
+  - id: sec
+    value: https://w3id.org/security#
+
+ontology:
+  - property: dc:title
+    value: VC Forgery Defense Vocabulary v1.1
+
+  - property: dc:description
+    value: RDFS [[RDF-SCHEMA]] vocabulary used by the [[[vc-forgery-defense-1.0]]] [[vc-forgery-defense-1.0]]
+
+  - property: rdfs:seeAlso
+    value: https://www.w3.org/TR/vc-forgery-defense-1.0/
+
+
+class:
+  - id: WitnessListCredential
+    label: Witness list credential class
+    upper_value: cred:VerifiableCredential
+    defined_by: https://www.w3.org/TR/vc-forgery-defense-1.0/#witness-list-credential
+
+  - id: WitnessList
+    label: Witness list credential subject class
+    defined_by: https://www.w3.org/TR/vc-forgery-defense-1.0/#witness-list-credential
+    context: none
+
+  - id: WitnessListEntry
+    upper_value: cred:CredentialStatus
+    label: Witness list credential status entry
+    defined_by: https://www.w3.org/TR/vc-forgery-defense-1.0/#witness-list-entry
+
+
+property:
+  - id: witnessSeed
+    label: Witness seed
+    defined_by: https://www.w3.org/TR/vc-forgery-defense-1.0/#witness-list-properties
+    domain: WitnessList
+    range: xsd:string
+
+  - id: witnessLength
+    label: Witness witness
+    defined_by: https://www.w3.org/TR/vc-forgery-defense-1.0/#witness-list-properties
+    domain: WitnessList
+    range: xsd:positiveInteger
+
+  - id: witnessCount
+    label: Witness count
+    defined_by: https://www.w3.org/TR/vc-forgery-defense-1.0/#witness-list-properties
+    domain: WitnessList
+    range: xsd:positiveInteger
+
+  - id: encodedWitnesses
+    label: Encoded witnesses
+    defined_by: https://www.w3.org/TR/vc-forgery-defense-1.0/#witness-list-properties
+    domain: WitnessList
+    range: sec:multibase
+
+  - id: cred:credentialSubject
+    defined_by: https://www.w3.org/TR/vc-data-model-2.1/#credential-subject
+    scope: WitnessListCredential
+    property_scope: WitnessList
+    html_class: hidden
+
+  - id: witnessListCredential
+    label: pointer to a witness list credential
+    defined_by: https://www.w3.org/TR/vc-forgery-defense-1.0/#witness-list-entry
+    domain: WitnessListEntry
+    range: WitnessListCredential
+
+  - id: witnessIndex
+    label: Witness index in a witness list credential
+    defined_by: https://www.w3.org/TR/vc-forgery-defense-1.0/#witness-list-entry
+    domain: WitnessListEntry
+    range: xsd:positiveInteger
+
+datatype:
+  - id: sec:multibase
+    label: Datatype for multibase values
+    upper_value: xsd:string
+    defined_by: https://www.w3.org/TR/cid-1.0/#multibase
+    context: none
